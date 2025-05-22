@@ -94,9 +94,9 @@ custom_extensions="${custom_extensions:-}"
 
 # 定义内置的媒体文件扩展名
 builtin_audio_extensions=("mp3" "flac" "wav" "aac" "ogg" "wma" "alac" "m4a" "aiff" "ape" "dsf" "dff" "wv" "pcm" "tta")
-builtin_video_extensions=("mp4" "mkv" "avi" "mov" "wmv" "flv" "webm" "vob" "mpg" "mpeg")
+builtin_video_extensions=("mp4" "mkv" "avi" "mov" "wmv" "flv" "webm" "vob" "mpg" "mpeg" "mts" "m2ts" "rmvb")
 builtin_image_extensions=("jpg" "jpeg" "png" "gif" "bmp" "tiff" "svg" "heic")
-builtin_other_extensions=("iso" "img" "bin" "nrg" "cue" "dvd" "lrc" "srt" "sub" "ssa" "ass" "vtt" "txt" "pdf" "doc" "docx" "csv" "xml" "new")
+builtin_other_extensions=("iso" "img" "bin" "nrg" "cue" "dvd" "lrc" "srt" "sub" "ssa" "ass" "vtt" "txt" "pdf" "doc" "docx" "csv" "xml" "new" "nfo")
 
 # 将目录树文件转换为目录文件的函数
 convert_directory_tree() {
@@ -317,7 +317,7 @@ delete_absent = $delete_absent
 media_extensions = set([
     "mp3", "flac", "wav", "aac", "ogg", "wma", "alac", "m4a",
     "aiff", "ape", "dsf", "dff", "wv", "pcm", "tta",
-    "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "vob", "mpg", "mpeg",
+    "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "vob", "mpg", "mpeg", "mts", "m2ts", "rmvb",
     "jpg", "jpeg", "png", "gif", "bmp", "tiff", "svg", "heic",
     "iso", "img", "bin", "nrg", "cue", "dvd",
     "lrc", "srt", "sub", "ssa", "ass", "vtt", "txt",
@@ -331,6 +331,7 @@ exclude_option = $exclude_option
 alist_url = "$full_alist_url"
 strm_save_path = "$strm_save_path"
 generated_directory_file = "$generated_directory_file"
+mount_path = "$mount_path"
 
 # 临时文件路径，存放在当前脚本执行目录
 temp_existing_structure = os.path.join("${script_dir}", "existing_structure.txt")
@@ -378,9 +379,9 @@ def create_strm_files():
             os.makedirs(os.path.join(strm_save_path, parent_path), exist_ok=True)
 
             if not os.path.exists(strm_file_path) or update_existing == 2:
-                encoded_path = urllib.parse.quote(line)
+                # encoded_path = urllib.parse.quote(line)
                 with open(strm_file_path, 'w', encoding='utf-8') as strm_file:
-                    strm_file.write(f"{alist_url}{encoded_path}")
+                    strm_file.write(f"{mount_path}/{line}")
                 to_create_file.write(strm_file_path + '\n')
 
             with lock:
@@ -764,11 +765,18 @@ def process_line(line, media_extensions, exclude_option, alist_url, mount_path, 
     file_name = os.path.basename(adjusted_path)
     parent_path = os.path.dirname(adjusted_path)
     os.makedirs(os.path.join(strm_save_path, parent_path), exist_ok=True)
+
+    original_file_path = os.path.join(strm_save_path, parent_path, file_name)
+    if os.path.exists(original_file_path):
+        return
+    file_name_without_ext = os.path.splitext(file_name)[0]
+    strm_ext_file_path = os.path.join(strm_save_path, parent_path, f'{file_name_without_ext}.strm')
+    if os.path.exists(strm_ext_file_path):
+        return
     
-    encoded_path = urllib.parse.quote(f'd{mount_path}/{parent_path}/{file_name}')
     strm_file_path = os.path.join(strm_save_path, parent_path, f'{file_name}.strm')
     with open(strm_file_path, 'w', encoding='utf-8') as strm_file:
-        strm_file.write(f'{alist_url}{encoded_path}')
+        strm_file.write(f'{mount_path}/{parent_path}/{file_name}')
 
 # 创建 .strm 文件，使用多线程以提高效率
 def create_strm_files():
@@ -778,7 +786,7 @@ def create_strm_files():
     media_extensions = {
         'mp3', 'flac', 'wav', 'aac', 'ogg', 'wma', 'alac', 'm4a',
         'aiff', 'ape', 'dsf', 'dff', 'wv', 'pcm', 'tta',
-        'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'vob', 'mpg', 'mpeg',
+        'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'vob', 'mpg', 'mpeg', 'mts', 'm2ts', 'rmvb',
         'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'svg', 'heic',
         'iso', 'img', 'bin', 'nrg', 'cue', 'dvd',
         'lrc', 'srt', 'sub', 'ssa', 'ass', 'vtt', 'txt',
@@ -915,6 +923,16 @@ download_specified_files() {
         read -r strm_directory
     done
     last_strm_directory="$strm_directory"  # 保存用户输入
+    
+    # 提示用户输入 alist 的地址加端口
+    if [ -n "$alist_url" ]; then
+        echo "请输入alist的地址+端口（例如：http://abc.com:5244），上次配置:${alist_url}，回车确认："
+    else
+        echo "请输入alist的地址+端口（例如：http://abc.com:5244）："
+    fi
+    read -r input_alist_url
+    alist_url="${input_alist_url:-$alist_url}"
+
     save_config  # 保存配置到文件
 
     # 扫描目录以发现存在的文件格式
@@ -987,8 +1005,9 @@ download_specified_files() {
                 original_filename=$(basename "$strm_file" .strm)
                 target_file="$target_dir/$original_filename"
 
-                echo "正在下载文件：$url"
-                curl -L -o "$target_file" "$url"
+                echo "正在下载文件：${alist_url}d$url"
+                # curl -L -o "$target_file" "${alist_url}d$url"
+                wget -P "$target_dir" "${alist_url}d$url"
 
                 if [ $? -eq 0 ]; then
                     file_size=$(stat -c%s "$target_file")
